@@ -1,6 +1,8 @@
 # -------------------------------------------------------------------
 # Packages needed:
+#   time
 #   requests
+#   urllib.request
 #   beautifulsoup4
 
 # Package install in terminal window:
@@ -8,7 +10,7 @@
 #   note: single quotes aren't required
 # -------------------------------------------------------------------
 # Original application for tv show watchlist tracker.
-#   pre-programmed to bias results from rotten tomatoes and to ShowsImages
+#   pre-programmed to bias results from Rotten Tomatoes and to ShowsImages
 #   directory
 
 # Can modify results to new application updating global variable:
@@ -23,11 +25,9 @@
 # -------------------------------------------------------------------
 
 import time
-import os                   # might need for file creation or working on diff OS types
 import requests
-import re
+import urllib.request
 from bs4 import BeautifulSoup
-
 
 # class FormatError(Exception):
 #     """
@@ -75,26 +75,31 @@ def main() -> None:
         read_title = split_read[1]
 
         # check if communication contains a title or different type
-        if title_check != 'title':
+        if title_check != 'query':
             time.sleep(5.0)
+            print('waiting')
             continue
         else:
             # parse show title to google search query format; i.e. spaces
             # replaced with '+'
             query_title = read_title.replace(' ', '+')
-            scrape_image(query_title)
-            # might remove prepended local dir
-            # with open('image-service.txt', 'w') as out_file:
-            #     out_file.write("path:"f"./{DEST_DIR}/{query_title}.jpg")
-            # out_file.close()
+            img_source = scrape_image(query_title)
+
+            # download to specified directory with specified name and write path to comm. pipe
+            urllib.request.urlretrieve(img_source, f'./{DEST_DIR}/{query_title}.jpg')
+            with open('image-service.txt', 'w') as out_file:
+                out_file.write("path:"f"./{DEST_DIR}/{query_title}.jpg")
+            out_file.close()
+            print('Success')
+            continue
 
 
-def scrape_image(query_title: str):
+def scrape_image(query_title: str) -> str:
     """
     When called, searches provided show_title query on internet, downloads
     image to directory, and returns image path.
     :param: show_title(str): title of show to find representative image of.
-    :return: n/a
+    :return: parsed_source(str): html source for image
     """
     # parse global relevance variable to google query format and page sourcing format
     if ' ' in QUERY_RELEVANCE:
@@ -150,8 +155,8 @@ def scrape_image(query_title: str):
     else:
         parsed_source = unparsed_source_links[0]
 
+    return parsed_source
+
 
 if __name__ == "__main__":
     main()
-
-
