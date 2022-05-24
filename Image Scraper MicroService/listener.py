@@ -25,6 +25,7 @@
 import time
 import os                   # might need for file creation or working on diff OS types
 import requests
+import re
 from bs4 import BeautifulSoup
 
 
@@ -129,15 +130,28 @@ def scrape_image(query_title: str):
     source_HTML = requests.get(source_URL)
     source_content = BeautifulSoup(source_HTML.content, 'html.parser')
 
-    # find source img class tags
-    image_tags = source_content.find_all()
-    print(image_tags)
-    img_links = list()
-    for tag in image_tags:
-        img_links.append(tag['src'])
-    print('links: ', img_links)
+    # find source images of desired class
+    # if you're adapting to another application, inspect your source page's
+    # classes and update
+    source_class = 'PhotosCarousel__image'
+    unparsed_source_links = list()
+    page_images = source_content.find_all('img')
+    for tag in page_images:
+        if 'class' in tag.attrs and tag['class'] == [source_class]:
+            unparsed_source_links.append(tag['src'])
+
+    # check if source link has a resizing page prepended to source
+    # if you're adapating to another application, inspect your source's
+    # resizing delimiter
+    parsed_source = None
+    if 'resiz' in unparsed_source_links[0]:
+        st_idx = unparsed_source_links[0].find('v2/') + 3
+        parsed_source = unparsed_source_links[0][st_idx:]
+    else:
+        parsed_source = unparsed_source_links[0]
 
 
 if __name__ == "__main__":
     main()
+
 
