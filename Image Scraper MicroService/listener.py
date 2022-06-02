@@ -4,6 +4,7 @@
 #   requests
 #   urllib.request
 #   beautifulsoup4
+#   os
 
 # Package install in terminal window:
 #   pip install 'PackageName'
@@ -27,6 +28,7 @@
 import time
 import requests
 import urllib.request
+import os
 from bs4 import BeautifulSoup
 
 # class FormatError(Exception):
@@ -39,6 +41,8 @@ from bs4 import BeautifulSoup
 #     print("Communication not meeting format 'type:value'")
 
 # Global declarations
+# communication pipe
+COMM_PIPE = 'image-service.txt'
 # relevance to add to query results
 QUERY_RELEVANCE = 'rotten tomatoes'
 # destination directory to save images
@@ -55,24 +59,19 @@ def main() -> None:
         -writes path to image to image-service.txt
     :return: n/a
     """
+    validate_comm_pipe()
+    validate_dest_dir()
 
     while True:
-        # Open image-service.txt
-        with open('image-service.txt', 'r') as is_file:
-            read_file = is_file.readline()
-        is_file.close()
-
-        if not read_file:
+        read_contents = read_pipe()
+        if not read_contents:
             continue
 
         # exception misbehavin now
         # if ':' not in read_file:
         #     raise FormatError
 
-        # split read comm. into type and value
-        split_read = read_file.split(":", 1)
-        title_check = split_read[0]
-        read_title = split_read[1]
+        title_check, read_title = split_contents(read_contents)
 
         # check if communication contains a title or different type
         if title_check != 'query':
@@ -80,16 +79,12 @@ def main() -> None:
             print('waiting')
             continue
         else:
-            # parse show title to google search query format; i.e. spaces
-            # replaced with '+'
-            query_title = read_title.replace(' ', '+')
+            query_title = parse_title(read_title)
             img_source = scrape_image(query_title)
 
-            # download to specified directory with specified name and write path to comm. pipe
-            urllib.request.urlretrieve(img_source, f'./{DEST_DIR}/{query_title}.jpg')
-            with open('image-service.txt', 'w') as out_file:
-                out_file.write("path:"f"./{DEST_DIR}/{query_title}.jpg")
-            out_file.close()
+            download_to_dir(img_source, query_title)
+
+            write_path(query_title)
             print('Success')
             continue
 
@@ -101,39 +96,17 @@ def scrape_image(query_title: str) -> str:
     :param: show_title(str): title of show to find representative image of.
     :return: parsed_source(str): html source for image
     """
-    # parse global relevance variable to google query format and page sourcing format
-    if ' ' in QUERY_RELEVANCE:
-        relevance_parsed = QUERY_RELEVANCE.replace(' ', '+')
-        sourcing_parsed = QUERY_RELEVANCE.replace(' ', '')
-    else:
-        relevance_parsed, sourcing_parsed = QUERY_RELEVANCE
+    relevance_parsed, sourcing_parsed = parse_relevance()
 
-    # create search request url for show title with rotten tomatoes appended to ensure relevance
-    # of google image results to application
-    # text after '&' after google search query direct query to google images
-    google_URL = f"https://www.google.com/search?q={relevance_parsed}+{query_title}"
+    google_URL = create_google_url(relevance_parsed, query_title)
 
-    # take HTML page content
-    google_HTML = requests.get(google_URL)
-    google_content = BeautifulSoup(google_HTML.content, 'html.parser')
+    google_content = get_google_content(google_URL)
 
-    # find all 'a' tags which include page links
-    google_links = google_content.find_all('a')
+    google_links = get_content_links(google_content)
 
-    # find all relevant page links in a tag elements and append to a list
-    sourcing_URLs = list()
-    for URL in google_links:
-        if f'{sourcing_parsed}' in URL['href']:
-            st_idx = 7
-            end_idx = URL['href'].find('&')
-            sourcing_URLs.append(URL['href'][st_idx:end_idx])
+    sourcing_URLs = parse_links(google_links, sourcing_parsed)
 
-    # take most relevant link
-    source_URL = sourcing_URLs[0]
-
-    # take HTML page content
-    source_HTML = requests.get(source_URL)
-    source_content = BeautifulSoup(source_HTML.content, 'html.parser')
+    source_content = get_source_content(sourcing_URLs[0])
 
     # find source images of desired class
     # if you're adapting to another application, inspect your source page's
@@ -157,6 +130,161 @@ def scrape_image(query_title: str) -> str:
 
     return parsed_source
 
+
+def validate_comm_pipe() -> None:
+    """
+    Checks if COMM_PIPE exists in local directory. If it doesn't, file is created.
+
+    :return:
+    """
+    if not os.path.isfile(f"./{COMM_PIPE}"):
+        with open(f"./{COMM_PIPE}") as cf:
+            pass
+        cf.close()
+
+
+def validate_dest_dir() -> None:
+    """
+    Checks if DEST_DIR exists in local directory. If it doesn't, directory is created.
+
+    :return: None
+    """
+    if not os.path.isdir(f"./{DEST_DIR}"):
+        os.mkdir(f"./{DEST_DIR}")
+
+
+def read_pipe() -> str:
+    """
+    Opens COMM_PIPE and reads current contents.
+
+    :return: (str) current string contents of file.
+    """
+    with open(f"./{COMM_PIPE}", 'r') as is_file:
+        read_file = is_file.readline()
+    is_file.close()
+    return read_file
+
+
+def split_contents(read_contents: str) -> tuple:
+    """
+    Takes read contents from pipe and splits into two parts for parsing.
+
+    :return: (tuple) tuple of strings for split read contents.
+    """
+    split_read = read_contents.split(":", 1)
+    return split_read[0], split_read[1]
+
+
+def parse_title(read_title: str) -> str:
+    """
+    Takes entered title information and parses contents to google search formatting.
+
+    :param read_title: (str) entered title information.
+    :return: (str) title parsed to google search formatting.
+    """
+    query_title = read_title.replace(' ', '+')
+    return query_title
+
+
+def download_to_dir(img_source, query_title) -> None:
+    """
+    Takes image source url and query title, downloads image to defined directory, and names
+    image file as specified.
+
+    :return: None
+    """
+    urllib.request.urlretrieve(img_source, f'./{DEST_DIR}/{query_title}.jpg')
+
+
+def write_path(query_title: str) -> None:
+    """
+    Takes query title information and write downloaded image path to COMM_PIPE.
+
+    :param query_title: (str) title parsed to google search formatting.
+    :return: None
+    """
+    with open(f"./{COMM_PIPE}", 'w') as out_file:
+        out_file.write("path:"f"./{DEST_DIR}/{query_title}.jpg")
+    out_file.close()
+
+
+def parse_relevance() -> tuple:
+    """
+    Parse global relevance variable to google query format and page sourcing format.
+
+    :return: (tuple) parsed str values for relevance and sourcing.
+    """
+    if ' ' in QUERY_RELEVANCE:
+        relevance_parsed = QUERY_RELEVANCE.replace(' ', '+')
+        sourcing_parsed = QUERY_RELEVANCE.replace(' ', '')
+    else:
+        relevance_parsed, sourcing_parsed = QUERY_RELEVANCE
+    return relevance_parsed, sourcing_parsed
+
+
+def create_google_url(relevance_parsed: str, query_title: str) -> str:
+    """
+    Takes parsed relevance and query title variables and creates a google search query URL.
+
+    :return: (str) google search query URL.
+    """
+    # create search request url for show title with rotten tomatoes appended to ensure relevance
+    # of google image results to application
+    # text after '&' after google search query direct query to google images
+    google_URL = f"https://www.google.com/search?q={relevance_parsed}+{query_title}"
+    return google_URL
+
+
+def get_google_content(google_URL: str) -> str:
+    """
+    Take google_URL, parse HTML content, and return content from the page.
+
+    :param google_URL: (str) google search query URL.
+    :return: (str) parsed content of html google search query.
+    """
+    google_HTML = requests.get(google_URL)
+    google_content = BeautifulSoup(google_HTML.content, 'html.parser')
+    return google_content
+
+
+def get_content_links(google_content: str) -> str:
+    """
+
+    :param google_content: (str) parsed content of html google search query.
+    :return:
+    """
+    # find all 'a' tags which include page links
+    google_links = google_content.find_all('a')
+    return google_links
+
+
+def parse_links(google_links: str, sourcing_parsed: str) -> list:
+    """
+    Parse links on google search query and add each to a list.
+
+    :param google_links: (str) links from google search page content.
+    :param sourcing_parsed: (str) sourcing relevance variable parsed.
+    :return: (list) list of links from google search query page.
+    """
+    sourcing_URLs = list()
+    for URL in google_links:
+        if f'{sourcing_parsed}' in URL['href']:
+            st_idx = 7
+            end_idx = URL['href'].find('&')
+            sourcing_URLs.append(URL['href'][st_idx:end_idx])
+    return sourcing_URLs
+
+
+def get_source_content(source_URL: str) -> str:
+    """
+    Take source_URL, parse HTML content, and return content from the page.
+
+    :param source_URL: (str) source query URL.
+    :return: (str) parsed content of html source query.
+    """
+    source_HTML = requests.get(source_URL)
+    source_content = BeautifulSoup(source_HTML.content, 'html.parser')
+    return source_content
 
 if __name__ == "__main__":
     main()
