@@ -1,4 +1,6 @@
 # -------------------------------------------------------------------
+#  INSTRUCTIONS
+# -------------------------------------------------------------------
 # Packages needed:
 #   time
 #   requests
@@ -9,6 +11,10 @@
 # Package install in terminal window:
 #   pip install 'PackageName'
 #   note: single quotes aren't required
+# -------------------------------------------------------------------
+#  Usage:
+#   pass search queries to the communication pipe (default defined as
+#   global var). Formatting is 'query:enter search query here'
 # -------------------------------------------------------------------
 # Original application for tv show watchlist tracker.
 #   pre-programmed to bias results from Rotten Tomatoes and to ShowsImages
@@ -40,7 +46,7 @@ from bs4 import BeautifulSoup
 #     """
 #     print("Communication not meeting format 'type:value'")
 
-# Global declarations
+# GLOBAL DECLARATIONS
 # communication pipe
 COMM_PIPE = 'image-service.txt'
 # relevance to add to query results
@@ -73,7 +79,6 @@ def main() -> None:
 
         title_check, read_title = split_contents(read_contents)
 
-        # check if communication contains a title or different type
         if title_check != 'query':
             time.sleep(5.0)
             print('waiting')
@@ -108,25 +113,9 @@ def scrape_image(query_title: str) -> str:
 
     source_content = get_source_content(sourcing_URLs[0])
 
-    # find source images of desired class
-    # if you're adapting to another application, inspect your source page's
-    # classes and update
-    source_class = 'PhotosCarousel__image'
-    unparsed_source_links = list()
-    page_images = source_content.find_all('img')
-    for tag in page_images:
-        if 'class' in tag.attrs and tag['class'] == [source_class]:
-            unparsed_source_links.append(tag['src'])
+    unparsed_source_links = gen_source_links(source_content)
 
-    # check if source link has a resizing page prepended to source
-    # if you're adapating to another application, inspect your source's
-    # resizing delimiter
-    parsed_source = None
-    if 'resiz' in unparsed_source_links[0]:
-        st_idx = unparsed_source_links[0].find('v2/') + 3
-        parsed_source = unparsed_source_links[0][st_idx:]
-    else:
-        parsed_source = unparsed_source_links[0]
+    parsed_source = parse_source_links(unparsed_source_links)
 
     return parsed_source
 
@@ -226,11 +215,11 @@ def create_google_url(relevance_parsed: str, query_title: str) -> str:
     """
     Takes parsed relevance and query title variables and creates a google search query URL.
 
+    Note: if a different search engine is used, search query URL might have different
+            different formatting; requiring you to update URL format.
+
     :return: (str) google search query URL.
     """
-    # create search request url for show title with rotten tomatoes appended to ensure relevance
-    # of google image results to application
-    # text after '&' after google search query direct query to google images
     google_URL = f"https://www.google.com/search?q={relevance_parsed}+{query_title}"
     return google_URL
 
@@ -286,5 +275,47 @@ def get_source_content(source_URL: str) -> str:
     source_content = BeautifulSoup(source_HTML.content, 'html.parser')
     return source_content
 
+
+def gen_source_links(source_content: str) -> list:
+    """
+    Take source content find all image source links and append to a list.
+
+    Note:  if you're adapting to another application, inspect your source page's
+            classes and update source_class to source's relevant HTML class
+
+    :param source_content: (list) list of string source links.
+    :return: (list) list of image source links
+    """
+    source_class = 'PhotosCarousel__image'
+    unparsed_source_links = list()
+    page_images = source_content.find_all('img')
+    for tag in page_images:
+        if 'class' in tag.attrs and tag['class'] == [source_class]:
+            unparsed_source_links.append(tag['src'])
+    return unparsed_source_links
+
+
+def parse_source_links(unparsed_source_links: list) -> str:
+    """
+    Parse first image link in list of unparsed image source links and
+    return a parsed link to the image for downloading.
+
+    Note:  check if source link has a resizing page prepended to source
+            if you're adapating to another application, inspect your source
+            looking for its resizing and resizing delimiter if necessary
+
+    :param unparsed_source_links: (list) list of image source links
+    :return: (str) parsed source link to image for downloading.
+    """
+    if 'resiz' in unparsed_source_links[0]:
+        st_idx = unparsed_source_links[0].find('v2/') + 3
+        parsed_source = unparsed_source_links[0][st_idx:]
+    else:
+        parsed_source = unparsed_source_links[0]
+
+    return parsed_source
+
+
 if __name__ == "__main__":
     main()
+
