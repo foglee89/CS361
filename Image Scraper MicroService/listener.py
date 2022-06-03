@@ -62,8 +62,9 @@ def main() -> None:
         -reads the show title
         -searches for representative image on internet
         -downloads image to local directory
-        -writes path to image to image-service.txt
-    :return: n/a
+        -writes path to image to COMM_PIPE
+
+    :return: None
     """
     validate_comm_pipe()
     validate_dest_dir()
@@ -98,6 +99,7 @@ def scrape_image(query_title: str) -> str:
     """
     When called, searches provided show_title query on internet, downloads
     image to directory, and returns image path.
+
     :param: show_title(str): title of show to find representative image of.
     :return: parsed_source(str): html source for image
     """
@@ -175,14 +177,23 @@ def parse_title(read_title: str) -> str:
     return query_title
 
 
-def download_to_dir(img_source, query_title) -> None:
+def download_to_dir(img_source: str, query_title: str) -> None:
     """
     Takes image source url and query title, downloads image to defined directory, and names
     image file as specified.
 
+    :param img_source: (str) image source URL.
+    :param query_title: (str) query title name.
     :return: None
     """
-    urllib.request.urlretrieve(img_source, f'./{DEST_DIR}/{query_title}.jpg')
+    pic_file = f'./{DEST_DIR}/{query_title}.jpg'
+
+    response = requests.get(img_source)
+    with open(pic_file, 'wb') as new_pic:
+        new_pic.write(response.content)
+        new_pic.flush()
+        os.fsync(new_pic.fileno())
+    new_pic.close()
 
 
 def write_path(query_title: str) -> None:
@@ -318,4 +329,3 @@ def parse_source_links(unparsed_source_links: list) -> str:
 
 if __name__ == "__main__":
     main()
-
