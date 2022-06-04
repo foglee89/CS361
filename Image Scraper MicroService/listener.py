@@ -4,7 +4,6 @@
 # Packages needed:
 #   time
 #   requests
-#   urllib.request
 #   beautifulsoup4
 #   os
 
@@ -20,6 +19,10 @@
 #   pre-programmed to bias results from Rotten Tomatoes and to ShowsImages
 #   directory
 
+# Can modify communication pipe global variable:
+#   COMM_PIPE
+#   note: communication pipe text file defined as local to program directory;
+
 # Can modify results to new application updating global variable:
 #   QUERY_RELEVANCE
 #   note: designed to handle full string input with spaces
@@ -29,22 +32,17 @@
 #   note: destination directory defined as local to program directory;
 #           potential future implementation to easily update and read
 #           with 'os' module
+
+# Can modify standard wait time global variable:
+#   STD_WAIT
+#   note: default 5 seconds
 # -------------------------------------------------------------------
 
 import time
 import requests
-import urllib.request
 import os
 from bs4 import BeautifulSoup
 
-# class FormatError(Exception):
-#     """
-#     Exception class when communication pipe isn't meeting format requirements.
-#
-#     :param Exception: defines to user-defined exception class
-#     :return: None
-#     """
-#     print("Communication not meeting format 'type:value'")
 
 # GLOBAL DECLARATIONS
 # communication pipe
@@ -53,6 +51,8 @@ COMM_PIPE = 'image-service.txt'
 QUERY_RELEVANCE = 'rotten tomatoes'
 # destination directory to save images
 DEST_DIR = 'ShowsImages'
+# std. wait duration
+STD_WAIT = 5.0
 
 
 def main() -> None:
@@ -74,23 +74,23 @@ def main() -> None:
         if not read_contents:
             continue
 
-        # exception misbehavin now
-        # if ':' not in read_file:
-        #     raise FormatError
+        if ':' not in read_contents:
+            format_error()
+            continue
 
-        title_check, read_title = split_contents(read_contents)
+        query_check, read_title = split_contents(read_contents)
 
-        if title_check != 'query':
-            time.sleep(5.0)
+        if query_check != 'query':
             print('waiting')
+            time.sleep(STD_WAIT)
             continue
         else:
             query_title = parse_title(read_title)
             img_source = scrape_image(query_title)
 
-            download_to_dir(img_source, query_title)
+            path = download_to_dir(img_source, query_title)
 
-            write_path(query_title)
+            write_to_pipe(f'path:{path}')
             print('Success')
             continue
 
@@ -156,6 +156,19 @@ def read_pipe() -> str:
     return read_file
 
 
+def format_error() -> None:
+    """
+    Writes to pipe that passed communication in COMM_PIPE didn't meet
+    formatting requirements and waits 5 seconds.
+
+    :return: None
+    """
+    format_err = "Communication not meeting format 'type:value'"
+    write_to_pipe(format_err)
+    print('format error')
+    time.sleep(STD_WAIT)
+
+
 def split_contents(read_contents: str) -> tuple:
     """
     Takes read contents from pipe and splits into two parts for parsing.
@@ -177,10 +190,10 @@ def parse_title(read_title: str) -> str:
     return query_title
 
 
-def download_to_dir(img_source: str, query_title: str) -> None:
+def download_to_dir(img_source: str, query_title: str) -> str:
     """
     Takes image source url and query title, downloads image to defined directory, and names
-    image file as specified.
+    image file as specified. Returns path to file.
 
     :param img_source: (str) image source URL.
     :param query_title: (str) query title name.
@@ -194,17 +207,18 @@ def download_to_dir(img_source: str, query_title: str) -> None:
         new_pic.flush()
         os.fsync(new_pic.fileno())
     new_pic.close()
+    return pic_file
 
 
-def write_path(query_title: str) -> None:
+def write_to_pipe(communication: str) -> None:
     """
     Takes query title information and write downloaded image path to COMM_PIPE.
 
-    :param query_title: (str) title parsed to google search formatting.
+    :param communication: (str) title parsed to google search formatting.
     :return: None
     """
     with open(f"./{COMM_PIPE}", 'w') as out_file:
-        out_file.write("path:"f"./{DEST_DIR}/{query_title}.jpg")
+        out_file.write(communication)
     out_file.close()
 
 
